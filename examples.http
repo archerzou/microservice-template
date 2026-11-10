@@ -1,0 +1,21 @@
+@orders = http://localhost:5830
+@notifications = http://localhost:5831
+
+### Keep this key to retry the same request. Use a new UUID for a new order.
+POST {{orders}}/orders
+Content-Type: application/json
+Idempotency-Key: 76e10fd9-642d-4101-a59f-ef46c2a915c0
+
+{"email":"reader@example.com","total":42.50}
+
+### Copy the returned order ID into these two URLs.
+GET {{orders}}/orders/00000000-0000-0000-0000-000000000000
+
+### May return 404 until the event has been consumed.
+GET {{notifications}}/notifications/00000000-0000-0000-0000-000000000000
+
+### APIs stay alive when RabbitMQ stops; readiness checks each service's own database.
+GET {{orders}}/health/ready
+
+### Machine-readable API description
+GET {{orders}}/openapi/v1.json

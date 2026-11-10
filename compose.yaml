@@ -1,0 +1,87 @@
+name: architecture-microservices
+services:
+  orders:
+    build:
+      context: .
+      args: { SERVICE: Orders }
+    ports: ["127.0.0.1:5830:8080"]
+    environment:
+      ConnectionStrings__Database: Host=orders-db;Database=orders;Username=orders_app;Password=${ORDERS_PASSWORD:?Run ./run.ps1 first};Timeout=3;Command Timeout=5
+      Broker__Host: rabbitmq
+      Broker__User: template
+      Broker__Password: ${BROKER_PASSWORD:?Run ./run.ps1 first}
+    depends_on:
+      orders-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [orders-data, messages]
+  notifications:
+    build:
+      context: .
+      args: { SERVICE: Notifications }
+    ports: ["127.0.0.1:5831:8080"]
+    environment:
+      ConnectionStrings__Database: Host=notifications-db;Database=notifications;Username=notifications_app;Password=${NOTIFICATIONS_PASSWORD:?Run ./run.ps1 first};Timeout=3;Command Timeout=5
+      Broker__Host: rabbitmq
+      Broker__User: template
+      Broker__Password: ${BROKER_PASSWORD:?Run ./run.ps1 first}
+    depends_on:
+      notifications-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [notifications-data, messages]
+  orders-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: orders_app
+      POSTGRES_PASSWORD: ${ORDERS_PASSWORD:?Run ./run.ps1 first}
+    volumes: [orders-data:/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U orders_app -d orders"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [orders-data]
+  notifications-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notifications_app
+      POSTGRES_PASSWORD: ${NOTIFICATIONS_PASSWORD:?Run ./run.ps1 first}
+    volumes: [notifications-data:/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U notifications_app -d notifications"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [notifications-data]
+  rabbitmq:
+    image: rabbitmq:4.2-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: template
+      RABBITMQ_DEFAULT_PASS: ${BROKER_PASSWORD:?Run ./run.ps1 first}
+    ports: ["127.0.0.1:15683:15672"]
+    volumes: [rabbit-data:/var/lib/rabbitmq]
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [messages]
+  replay:
+    profiles: [tools]
+    build:
+      context: .
+      args: { SERVICE: Replay }
+    environment:
+      Broker__Host: rabbitmq
+      Broker__User: template
+      Broker__Password: ${BROKER_PASSWORD:?Run ./run.ps1 first}
+    networks: [messages]
+networks:
+  orders-data: { internal: true }
+  notifications-data: { internal: true }
+  messages:
+volumes:
+  orders-data:
+  notifications-data:
+  rabbit-data:
